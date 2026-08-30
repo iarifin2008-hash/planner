@@ -16,6 +16,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -75,6 +76,7 @@ fun VoiceExpenseAssistantDialog(
     var editAmountText by remember { mutableStateOf("") }
     var editDate by remember { mutableStateOf("") }
     var editCategory by remember { mutableStateOf("VARIABLE") }
+    var editWallet by remember { mutableStateOf("Uang Cash") }
 
     val infiniteTransition = rememberInfiniteTransition(label = "mic_pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -116,6 +118,7 @@ fun VoiceExpenseAssistantDialog(
                 editAmountText = if (result.amount > 0) String.format(Locale.US, "%.0f", result.amount) else ""
                 editDate = result.date.ifEmpty { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()) }
                 editCategory = result.targetCategory
+                editWallet = result.walletName.ifEmpty { "Uang Cash" }
 
                 if (autoSyncEnabled && result.amount > 0 && result.itemTitle.isNotBlank()) {
                     executeImmediateSync(result)
@@ -532,6 +535,14 @@ fun VoiceExpenseAssistantDialog(
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
+                                    Text("Sumber Dompet:", fontSize = 11.sp, color = TextSecondaryMuted)
+                                    Text("💳 ${analysis.walletName}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PastelSkyPrimary)
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
                                     Text("Tanggal:", fontSize = 11.sp, color = TextSecondaryMuted)
                                     Text("📅 ${analysis.date}", fontSize = 10.sp, color = TextPrimaryDark)
                                 }
@@ -669,6 +680,25 @@ fun VoiceExpenseAssistantDialog(
                                             )
                                         }
                                     }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text("Pilih Sumber Dana (Dompet):", fontSize = 10.sp, color = TextSecondaryMuted)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        listOf("Uang Cash", "Saldo DANA", "Saldo Rekening", "GoPay", "ShopeePay", "OVO").forEach { wName ->
+                                            FilterChip(
+                                                selected = editWallet.equals(wName, ignoreCase = true),
+                                                onClick = { editWallet = wName },
+                                                label = { Text(wName, fontSize = 10.sp) }
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -682,7 +712,8 @@ fun VoiceExpenseAssistantDialog(
                                             itemTitle = editTitle,
                                             amount = amt,
                                             date = editDate,
-                                            targetCategory = editCategory
+                                            targetCategory = editCategory,
+                                            walletName = editWallet
                                         )
                                         executeImmediateSync(finalAnalysis)
                                     } else {

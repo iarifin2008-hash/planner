@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,12 +41,35 @@ fun MonthlyRecapScreen(
     onCreateNewMonthClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var recapNotes by remember { mutableStateOf("") }
     var showSaveSuccess by remember { mutableStateOf(false) }
 
     val needsPercent = if (overview.totalIncome > 0) ((overview.totalFixedActual + overview.totalDailyExpense) / overview.totalIncome) * 100.0 else 0.0
     val wantsPercent = if (overview.totalIncome > 0) ((overview.totalVariableActual + overview.totalSubActual) / overview.totalIncome) * 100.0 else 0.0
     val savingsPercent = overview.savingsRatePercent
+
+    fun generateRecapText(): String {
+        return """
+            📊 *REKAP KEUANGAN $monthName $year* 📊
+            ------------------------------------
+            💰 Total Pemasukan: ${CurrencyUtils.formatRupiah(overview.totalIncome)}
+            🏦 Total Tabungan: ${CurrencyUtils.formatRupiah(overview.totalSavingActual)} (${String.format(java.util.Locale.US, "%.1f", savingsPercent)}%)
+            💸 Total Pengeluaran: ${CurrencyUtils.formatRupiah(overview.totalActualExpense)}
+            ✨ Sisa Bersih: ${CurrencyUtils.formatRupiah(overview.remainingBalance)}
+
+            Evaluasi Rasio 50/30/20:
+            • Kebutuhan Pokok: ${String.format(java.util.Locale.US, "%.1f", needsPercent)}% (Ideal ≤50%)
+            • Keinginan & Jajan: ${String.format(java.util.Locale.US, "%.1f", wantsPercent)}% (Ideal ≤30%)
+            • Tabungan & Investasi: ${String.format(java.util.Locale.US, "%.1f", savingsPercent)}% (Ideal ≥20%)
+
+            Status: ${if (overview.remainingBalance >= 0) "Surplus Sehat ✨" else "Defisit ⚠️"}
+            ${if (recapNotes.isNotBlank()) "Catatan: $recapNotes" else ""}
+            ------------------------------------
+            Dicatat rapi dengan Money Planner
+        """.trimIndent()
+    }
 
     Column(
         modifier = modifier
@@ -191,7 +219,7 @@ fun MonthlyRecapScreen(
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simpan Rekapan")
+                        Text("Simpan Rekapan", fontSize = 12.sp)
                     }
 
                     FilledTonalButton(
@@ -200,7 +228,44 @@ fun MonthlyRecapScreen(
                     ) {
                         Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Bulan Selanjutnya")
+                        Text("Bulan Selanjutnya", fontSize = 12.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val text = generateRecapText()
+                            clipboardManager.setText(AnnotatedString(text))
+                            Toast.makeText(context, "Ringkasan disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Salin Teks Rekap", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val text = generateRecapText()
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, text)
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Bagikan Rekapan Keuangan"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Bagikan Laporan", fontSize = 11.sp)
                     }
                 }
 

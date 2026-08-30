@@ -193,7 +193,7 @@ fun BudgetDashboardScreen(
                     SummaryMetricCard(
                         title = "Pendapatan Bulanan",
                         amount = overview.totalIncome,
-                        subtitle = "Total Pemasukan",
+                        subtitle = "Sumber Dana & Kas (${wallets.size} Dompet)",
                         backgroundColor = Color(0xFFF4FAFE),
                         borderColor = PastelCardBorder,
                         accentColor = PastelSkyPrimary,

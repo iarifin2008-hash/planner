@@ -3,6 +3,8 @@ package com.example.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,10 +32,27 @@ fun DailyTrackerScreen(
     onEditClick: (DailyExpenseItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Semua") }
+
+    val categories = listOf("Semua", "Jajan", "Makan", "Belanja", "Transport", "Hiburan", "Lainnya")
+
+    val filteredList = remember(dailyExpenses, searchQuery, selectedCategory) {
+        dailyExpenses.filter { item ->
+            val matchesCategory = if (selectedCategory == "Semua") true else item.category.equals(selectedCategory, ignoreCase = true)
+            val matchesSearch = if (searchQuery.isBlank()) true else {
+                item.title.contains(searchQuery, ignoreCase = true) ||
+                item.category.contains(searchQuery, ignoreCase = true) ||
+                item.notes.contains(searchQuery, ignoreCase = true) ||
+                item.walletName.contains(searchQuery, ignoreCase = true)
+            }
+            matchesCategory && matchesSearch
+        }
+    }
+
     val totalJajan = dailyExpenses.sumOf { it.totalAmount }
     val totalCount = dailyExpenses.size
-    val totalJajanOnly = dailyExpenses.filter { it.category == "Jajan" }.sumOf { it.totalAmount }
-    val totalBelanjaOnly = dailyExpenses.filter { it.category == "Belanja" }.sumOf { it.totalAmount }
+    val totalBelanjaOnly = dailyExpenses.filter { it.category.equals("Belanja", ignoreCase = true) }.sumOf { it.totalAmount }
 
     Column(
         modifier = modifier
@@ -91,7 +110,7 @@ fun DailyTrackerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Table Header Card
         Card(
@@ -106,7 +125,7 @@ fun DailyTrackerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Tracker Jajan Selama 1 Bulan",
                             fontSize = 14.sp,
@@ -114,7 +133,7 @@ fun DailyTrackerScreen(
                             color = PastelSkyDark
                         )
                         Text(
-                            text = "Catat pengeluaran mikro harian agar tidak boncos",
+                            text = "Catat pengeluaran mikro harian & sumber dana terpakai",
                             fontSize = 10.sp,
                             color = TextSecondaryMuted
                         )
@@ -132,6 +151,65 @@ fun DailyTrackerScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Search & Filter Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Cari jajan / sumber dana...", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondaryMuted) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color(0xFFE2EFF9),
+                            focusedBorderColor = PastelSkyPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth().height(46.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Category Chips Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    categories.forEach { cat ->
+                        val isSelected = selectedCategory == cat
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PastelSkyPrimary,
+                                selectedLabelColor = Color.White
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = Color(0xFFE2EFF9),
+                                selectedBorderColor = PastelSkyPrimary
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 // Column Headers
                 Row(
                     modifier = Modifier
@@ -141,22 +219,23 @@ fun DailyTrackerScreen(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Tgl", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(52.dp))
-                    Text("Keterangan", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.weight(1f))
-                    Text("Qty", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(36.dp))
-                    Text("Harga", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(60.dp))
-                    Text("Total", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(65.dp))
+                    Text("Tgl", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(48.dp))
+                    Text("Keterangan & Dompet", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.weight(1f))
+                    Text("Qty", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(32.dp))
+                    Text("Harga", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(55.dp))
+                    Text("Total", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PastelSkyDark, modifier = Modifier.width(62.dp))
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                if (dailyExpenses.isEmpty()) {
+                if (filteredList.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Belum ada catatan jajan harian bulan ini.\nTekan '+ Tambah' untuk mencatat.",
+                            if (searchQuery.isNotBlank() || selectedCategory != "Semua") "Tidak ada transaksi jajan yang sesuai filter."
+                            else "Belum ada catatan jajan harian bulan ini.\nTekan '+ Tambah' untuk mencatat.",
                             fontSize = 12.sp,
                             color = TextCaption,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -167,7 +246,7 @@ fun DailyTrackerScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(dailyExpenses) { item ->
+                        items(filteredList) { item ->
                             DailyExpenseTableRow(item = item, onClick = { onEditClick(item) })
                         }
                     }
@@ -185,18 +264,18 @@ private fun DailyExpenseTableRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
             .background(Color(0xFFFAFDFF))
-            .border(0.5.dp, Color(0xFFE2EFF9), RoundedCornerShape(6.dp))
+            .border(0.5.dp, Color(0xFFE2EFF9), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = item.date.take(5), // dd/MM
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = TextSecondaryMuted,
-            modifier = Modifier.width(52.dp)
+            modifier = Modifier.width(48.dp)
         )
 
         Column(modifier = Modifier.weight(1f)) {
@@ -207,25 +286,51 @@ private fun DailyExpenseTableRow(
                 color = TextPrimaryDark,
                 maxLines = 1
             )
-            Text(
-                text = item.category,
-                fontSize = 9.sp,
-                color = PastelSkyPrimary
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 1.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(PastelSkyLight)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = item.category,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PastelSkyDark
+                    )
+                }
+                if (item.walletName.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color(0xFFE0F2FE))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = item.walletName,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0369A1)
+                        )
+                    }
+                }
+            }
         }
 
         Text(
             text = "${item.quantity}x",
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = TextSecondaryMuted,
-            modifier = Modifier.width(36.dp)
+            modifier = Modifier.width(32.dp)
         )
 
         Text(
             text = CurrencyUtils.formatRupiahShort(item.unitPrice),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = TextSecondaryMuted,
-            modifier = Modifier.width(60.dp)
+            modifier = Modifier.width(55.dp)
         )
 
         Text(
@@ -233,7 +338,7 @@ private fun DailyExpenseTableRow(
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = PastelSkyDark,
-            modifier = Modifier.width(65.dp)
+            modifier = Modifier.width(62.dp)
         )
     }
 }

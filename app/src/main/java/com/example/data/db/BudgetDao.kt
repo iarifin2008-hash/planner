@@ -62,6 +62,9 @@ interface BudgetDao {
     @Query("SELECT * FROM income_items WHERE monthId = :monthId ORDER BY id ASC")
     fun getIncomesForMonth(monthId: String): Flow<List<IncomeItem>>
 
+    @Query("SELECT * FROM income_items WHERE monthId = :monthId ORDER BY id ASC")
+    suspend fun getIncomesForMonthOnce(monthId: String): List<IncomeItem>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertIncome(item: IncomeItem)
 

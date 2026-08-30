@@ -174,13 +174,27 @@ object GeminiVoiceService {
         // 1. Extract Amount
         var extractedAmount = 0.0
 
-        // Match patterns like: "50 ribu", "50rb", "50.000", "50k", "1.5 juta", "2jt", "30000"
+        // Match patterns like: "50 ribu", "50rb", "50.000", "50k", "1.5 juta", "2jt", "30000", "ceban", "goceng", "gocap", "sejuta", "dua juta setengah"
         val regexKilo = Regex("""(\d+(?:[.,]\d+)?)\s*(?:ribu|rb|k\b)""", RegexOption.IGNORE_CASE)
         val regexJuta = Regex("""(\d+(?:[.,]\d+)?)\s*(?:juta|jt\b)""", RegexOption.IGNORE_CASE)
+        val regexJutaSetengah = Regex("""(\d+)\s*(?:juta\s*setengah|jt\s*setengah)\b""", RegexOption.IGNORE_CASE)
         val regexPlainNumber = Regex("""\b(\d{1,3}(?:\.\d{3})+|\d{4,9})\b""")
-        val regexWordNumber = Regex("""\b(sepuluh|sebelas|dua puluh|tiga puluh|empat puluh|lima puluh|enam puluh|tujuh puluh|delapan puluh|sembilan puluh|seratus|dua ratus|tiga ratus|lima ratus)\s*(?:ribu)?\b""", RegexOption.IGNORE_CASE)
+        val regexWordNumber = Regex("""\b(seceng|noceng|goceng|ceban|ceng|gocap|cepek|gopik|seceng|sepuluh|sebelas|dua belas|lima belas|dua puluh|dua puluh lima|tiga puluh|tiga puluh lima|empat puluh|lima puluh|enam puluh|tujuh puluh|delapan puluh|sembilan puluh|seratus|seratus lima puluh|dua ratus|dua ratus lima puluh|tiga ratus|lima ratus|tujuh ratus lima puluh|sejuta|satu juta|dua juta|setengah juta)\s*(?:ribu|rb)?\b""", RegexOption.IGNORE_CASE)
 
         when {
+            lower.contains("setengah juta") -> extractedAmount = 500000.0
+            lower.contains("sejuta") || lower.contains("satu juta") -> {
+                if (lower.contains("sejuta setengah") || lower.contains("satu juta setengah")) {
+                    extractedAmount = 1500000.0
+                } else {
+                    extractedAmount = 1000000.0
+                }
+            }
+            regexJutaSetengah.containsMatchIn(lower) -> {
+                val match = regexJutaSetengah.find(lower)
+                val base = match?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                extractedAmount = (base * 1000000.0) + 500000.0
+            }
             regexJuta.containsMatchIn(lower) -> {
                 val match = regexJuta.find(lower)
                 val numStr = match?.groupValues?.get(1)?.replace(",", ".") ?: "0"
@@ -191,6 +205,11 @@ object GeminiVoiceService {
                 val numStr = match?.groupValues?.get(1)?.replace(",", ".") ?: "0"
                 extractedAmount = (numStr.toDoubleOrNull() ?: 0.0) * 1_000.0
             }
+            lower.contains("ceban") -> extractedAmount = 10000.0
+            lower.contains("goceng") -> extractedAmount = 5000.0
+            lower.contains("gocap") -> extractedAmount = 50000.0
+            lower.contains("seceng") -> extractedAmount = 1000.0
+            lower.contains("cepek") -> extractedAmount = 100000.0
             regexPlainNumber.containsMatchIn(lower) -> {
                 val match = regexPlainNumber.find(lower)
                 val cleanStr = match?.groupValues?.get(1)?.replace(".", "") ?: "0"
@@ -199,14 +218,21 @@ object GeminiVoiceService {
             regexWordNumber.containsMatchIn(lower) -> {
                 when {
                     lower.contains("sepuluh ribu") -> extractedAmount = 10000.0
-                    lower.contains("dua puluh ribu") -> extractedAmount = 20000.0
+                    lower.contains("lima belas ribu") -> extractedAmount = 15000.0
                     lower.contains("dua puluh lima ribu") -> extractedAmount = 25000.0
+                    lower.contains("dua puluh ribu") -> extractedAmount = 20000.0
+                    lower.contains("tiga puluh lima ribu") -> extractedAmount = 35000.0
                     lower.contains("tiga puluh ribu") -> extractedAmount = 30000.0
+                    lower.contains("empat puluh ribu") -> extractedAmount = 40000.0
                     lower.contains("lima puluh ribu") -> extractedAmount = 50000.0
+                    lower.contains("seratus lima puluh ribu") -> extractedAmount = 150000.0
                     lower.contains("seratus ribu") -> extractedAmount = 100000.0
+                    lower.contains("dua ratus lima puluh ribu") -> extractedAmount = 250000.0
                     lower.contains("dua ratus ribu") -> extractedAmount = 200000.0
+                    lower.contains("tiga ratus ribu") -> extractedAmount = 300000.0
                     lower.contains("lima ratus ribu") -> extractedAmount = 500000.0
-                    lower.contains("satu juta") -> extractedAmount = 1000000.0
+                    lower.contains("tujuh ratus lima puluh ribu") -> extractedAmount = 750000.0
+                    lower.contains("dua juta") -> extractedAmount = 2000000.0
                 }
             }
         }
@@ -276,22 +302,26 @@ object GeminiVoiceService {
             }
         }
 
-        // 4. Extract Payment Wallet Source (Cash, DANA, Rekening, GoPay, ShopeePay, OVO)
+        // 4. Extract Payment Wallet Source (Cash, DANA, Rekening, GoPay, ShopeePay, OVO, Seabank, Blu, Jago, LinkAja)
         var detectedWallet = when {
             lower.contains("dana") || lower.contains("saldo dana") -> "Saldo DANA"
-            lower.contains("cash") || lower.contains("tunai") || lower.contains("uang fisik") -> "Uang Cash"
-            lower.contains("rekening") || lower.contains("bca") || lower.contains("bri") || lower.contains("mandiri") ||
-            lower.contains("bni") || lower.contains("jago") || lower.contains("bsi") || lower.contains("kartu") || lower.contains("transfer") -> "Saldo Rekening"
-            lower.contains("gopay") || lower.contains("gojek") -> "GoPay"
+            lower.contains("cash") || lower.contains("tunai") || lower.contains("uang fisik") || lower.contains("kantong") -> "Uang Cash"
+            lower.contains("gopay") || lower.contains("gojek") || lower.contains("gofood") -> "GoPay"
             lower.contains("shopeepay") || lower.contains("spay") || lower.contains("shopee") -> "ShopeePay"
             lower.contains("ovo") -> "OVO"
+            lower.contains("linkaja") -> "LinkAja"
+            lower.contains("seabank") -> "SeaBank"
+            lower.contains("jago") || lower.contains("bank jago") -> "Bank Jago"
+            lower.contains("blu") || lower.contains("jenius") -> "Digital Bank"
+            lower.contains("rekening") || lower.contains("bca") || lower.contains("bri") || lower.contains("mandiri") ||
+            lower.contains("bni") || lower.contains("bsi") || lower.contains("kartu") || lower.contains("transfer") || lower.contains("m-banking") || lower.contains("mbanking") -> "Saldo Rekening"
             targetCategory == "FIXED" || targetCategory == "SUBSCRIPTION" || targetCategory == "SAVINGS" || targetCategory == "INCOME" -> "Saldo Rekening"
             else -> "Uang Cash"
         }
 
         // Clean Title
         var cleanTitle = transcript
-            .replace(Regex("""(?i)\b(tadi|tadi siang|tadi pagi|tadi malam|hari ini|kemarin|tolong|catat|masukkan|beli|bayar|sebesar|seharga|nominal|rupiah|ribu|rb|k|juta|jt|pakai|lewat|pake|dana|cash|tunai|rekening|bca|bri|mandiri|bni|gopay|ovo|shopeepay)\b"""), "")
+            .replace(Regex("""(?i)\b(tadi|tadi siang|tadi pagi|tadi malam|hari ini|kemarin|tolong|catat|masukkan|beli|bayar|sebesar|seharga|nominal|rupiah|ribu|rb|k|juta|jt|pakai|lewat|pake|dana|cash|tunai|rekening|bca|bri|mandiri|bni|gopay|ovo|shopeepay|seabank|jago|linkaja|qris)\b"""), "")
             .replace(Regex("""\d+"""), "")
             .replace(Regex("""\s+"""), " ")
             .trim()

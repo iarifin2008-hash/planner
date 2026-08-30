@@ -126,7 +126,8 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
             variableExpenses,
             savings,
             subscriptions,
-            dailyExpenses
+            dailyExpenses,
+            wallets
         )
     ) { flows ->
         @Suppress("UNCHECKED_CAST")
@@ -143,8 +144,11 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         val subList = flows[5] as List<SubscriptionItem>
         @Suppress("UNCHECKED_CAST")
         val dailyList = flows[6] as List<DailyExpenseItem>
+        @Suppress("UNCHECKED_CAST")
+        val wList = flows[7] as List<WalletItem>
 
-        val totalIncome = incList.sumOf { it.amount }
+        // Disinkronkan dengan total saldo dompet kas jika tersedia, atau total pemasukan
+        val totalIncome = if (wList.isNotEmpty()) wList.sumOf { it.balance } else incList.sumOf { it.amount }
         val fixedSpent = fixList.sumOf { it.actualAmount }
         val varSpent = varList.sumOf { it.actualAmount } + dailyList.sumOf { it.totalAmount }
         val savSpent = savList.sumOf { it.actualAmount }
@@ -179,7 +183,7 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Auto-seed default allocations when switching to a month without any allocations
+    // Auto-seed default allocations and sync wallets with incomes when switching months
     init {
         viewModelScope.launch {
             _currentMonthId.collectLatest { mId ->
@@ -194,17 +198,20 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
                         )
                     )
                 }
+                syncWalletsAndIncomes()
             }
         }
     }
 
-    // Financial Overview Calculation
+    // Financial Overview Calculation - 100% Disinkronkan dengan Dompet Kas & Sumber Dana
     val financialOverview: StateFlow<FinancialOverview> = combine(
         combine(incomes, savings, fixedExpenses) { inc, sav, fix -> Triple(inc, sav, fix) },
         combine(variableExpenses, subscriptions, dailyExpenses) { varExp, sub, daily -> Triple(varExp, sub, daily) },
+        wallets,
         userProfile
-    ) { (inc, sav, fix), (varExp, sub, daily), profile ->
-        val totalIncome = inc.sumOf { it.amount }
+    ) { (inc, sav, fix), (varExp, sub, daily), walletList, profile ->
+        // Pendapatan Bulanan disamakan & disinkronkan langsung dengan total Sumber Dana & Dompet Kas
+        val totalIncome = if (walletList.isNotEmpty()) walletList.sumOf { it.balance } else inc.sumOf { it.amount }
         val totalSavingPlanned = sav.sumOf { it.plannedAmount }
         val totalSavingActual = sav.sumOf { it.actualAmount }
 
@@ -220,7 +227,7 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         val totalDaily = daily.sumOf { it.totalAmount }
 
         val totalActualExpense = totalFixedActual + totalVarActual + totalSubActual + totalDaily
-        val remainingBalance = totalIncome - (totalActualExpense + totalSavingActual)
+        val remainingBalance = if (walletList.isNotEmpty()) walletList.sumOf { it.balance } else (totalIncome - (totalActualExpense + totalSavingActual))
         val remainingBudgetPercent = if (totalIncome > 0.0) ((remainingBalance / totalIncome) * 100.0).coerceIn(0.0, 100.0) else 100.0
         val savingsRatePercent = if (totalIncome > 0.0) ((totalSavingActual / totalIncome) * 100.0) else 0.0
 
@@ -297,15 +304,30 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
-    // Chart Slices: Income
-    val incomeChartSlices: StateFlow<List<ChartSlice>> = incomes.map { list ->
-        val colors = listOf(Color(0xFF6599B8), Color(0xFF74C69D), Color(0xFFF4A261), Color(0xFFA594F9), Color(0xFFE2847A))
-        list.mapIndexed { idx, item ->
-            ChartSlice(
-                label = item.source,
-                value = item.amount,
-                color = colors[idx % colors.size]
-            )
+    // Chart Slices: Income & Sumber Kas
+    val incomeChartSlices: StateFlow<List<ChartSlice>> = combine(wallets, incomes) { wList, incList ->
+        val colors = listOf(Color(0xFF6599B8), Color(0xFF74C69D), Color(0xFF118EEA), Color(0xFF00AED6), Color(0xFFF4A261), Color(0xFFA594F9), Color(0xFFE2847A))
+        if (wList.isNotEmpty()) {
+            wList.mapIndexed { idx, item ->
+                val itemColor = try {
+                    Color(android.graphics.Color.parseColor(item.colorHex))
+                } catch (e: Exception) {
+                    colors[idx % colors.size]
+                }
+                ChartSlice(
+                    label = item.name,
+                    value = item.balance,
+                    color = itemColor
+                )
+            }
+        } else {
+            incList.mapIndexed { idx, item ->
+                ChartSlice(
+                    label = item.source,
+                    value = item.amount,
+                    color = colors[idx % colors.size]
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -445,33 +467,89 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Wallet & Multi-Anggaran Management
+    // Wallet & Multi-Anggaran Management (100% Terhubung dengan Pendapatan Bulanan & Saldo)
     fun addWallet(name: String, type: String, initialBalance: Double, colorHex: String = "#6599B8", iconName: String = "cash") {
         viewModelScope.launch {
-            repository.insertWallet(
-                WalletItem(
-                    name = name.trim(),
-                    type = type,
-                    balance = initialBalance,
-                    colorHex = colorHex,
-                    iconName = iconName,
-                    isDefault = false
-                )
+            val wallet = WalletItem(
+                name = name.trim(),
+                type = type,
+                balance = initialBalance,
+                colorHex = colorHex,
+                iconName = iconName,
+                isDefault = false
             )
+            repository.insertWallet(wallet)
+            // Sinkronisasi otomatis ke tabel Pendapatan Bulanan agar saldo & pemasukan selalu sama
+            val mId = _currentMonthId.value
+            val existingIncomes = repository.getIncomesForMonthOnce(mId)
+            val matchedIncome = existingIncomes.find {
+                it.walletName.equals(name.trim(), ignoreCase = true) ||
+                it.source.equals(name.trim(), ignoreCase = true)
+            }
+            if (matchedIncome == null) {
+                repository.insertIncome(
+                    IncomeItem(
+                        monthId = mId,
+                        source = name.trim(),
+                        type = "Kas / $type",
+                        amount = initialBalance,
+                        date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                        walletName = name.trim()
+                    )
+                )
+            } else {
+                repository.updateIncome(
+                    matchedIncome.copy(
+                        amount = initialBalance,
+                        walletName = name.trim()
+                    )
+                )
+            }
             triggerCloudSync()
         }
     }
 
     fun updateWallet(item: WalletItem) {
         viewModelScope.launch {
+            val oldWallets = repository.getAllWalletsOnce()
+            val oldItem = oldWallets.find { it.id == item.id }
             repository.updateWallet(item)
+
+            // Sinkronisasi perubahan nama / saldo ke item Pendapatan di bulan aktif
+            val mId = _currentMonthId.value
+            val currentIncomes = repository.getIncomesForMonthOnce(mId)
+            val matchedIncome = currentIncomes.find {
+                it.walletName.equals(oldItem?.name ?: item.name, ignoreCase = true) ||
+                it.source.equals(oldItem?.name ?: item.name, ignoreCase = true)
+            }
+            if (matchedIncome != null) {
+                repository.updateIncome(
+                    matchedIncome.copy(
+                        source = item.name,
+                        amount = item.balance,
+                        walletName = item.name
+                    )
+                )
+            }
             triggerCloudSync()
         }
     }
 
     fun updateWalletBalanceManual(walletId: Long, newBalance: Double) {
         viewModelScope.launch {
+            val wallet = repository.getWalletById(walletId)
             repository.updateWalletBalance(walletId, newBalance)
+            if (wallet != null) {
+                val mId = _currentMonthId.value
+                val currentIncomes = repository.getIncomesForMonthOnce(mId)
+                val matchedIncome = currentIncomes.find {
+                    it.walletName.equals(wallet.name, ignoreCase = true) ||
+                    it.source.equals(wallet.name, ignoreCase = true)
+                }
+                if (matchedIncome != null) {
+                    repository.updateIncome(matchedIncome.copy(amount = newBalance))
+                }
+            }
             triggerCloudSync()
         }
     }
@@ -479,6 +557,50 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteWallet(item: WalletItem) {
         viewModelScope.launch {
             repository.deleteWallet(item)
+            val mId = _currentMonthId.value
+            val currentIncomes = repository.getIncomesForMonthOnce(mId)
+            val matchedIncome = currentIncomes.find {
+                it.walletName.equals(item.name, ignoreCase = true) ||
+                it.source.equals(item.name, ignoreCase = true)
+            }
+            if (matchedIncome != null) {
+                repository.deleteIncome(matchedIncome)
+            }
+            triggerCloudSync()
+        }
+    }
+
+    /**
+     * Memastikan semua saldo dompet kas dan sumber pendapatan bulan ini tersinkronisasi 100%
+     */
+    fun syncWalletsAndIncomes() {
+        viewModelScope.launch {
+            val allWallets = repository.getAllWalletsOnce()
+            val mId = _currentMonthId.value
+            val currentIncomes = repository.getIncomesForMonthOnce(mId)
+
+            allWallets.forEach { wallet ->
+                val matched = currentIncomes.find {
+                    it.walletName.equals(wallet.name, ignoreCase = true) ||
+                    it.source.equals(wallet.name, ignoreCase = true)
+                }
+                if (matched != null) {
+                    if (matched.amount != wallet.balance) {
+                        repository.updateIncome(matched.copy(amount = wallet.balance, walletName = wallet.name))
+                    }
+                } else {
+                    repository.insertIncome(
+                        IncomeItem(
+                            monthId = mId,
+                            source = wallet.name,
+                            type = "Kas / ${wallet.type}",
+                            amount = wallet.balance,
+                            date = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
+                            walletName = wallet.name
+                        )
+                    )
+                }
+            }
             triggerCloudSync()
         }
     }
@@ -1065,17 +1187,39 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun resetAllocationsToDefault() {
+        applyBudgetPreset("50/30/20")
+    }
+
+    fun applyBudgetPreset(presetType: String) {
         viewModelScope.launch {
             val mId = _currentMonthId.value
             repository.clearAllocationsForMonth(mId)
-            repository.insertAllocations(
-                listOf(
+            val allocationsList = when (presetType) {
+                "60/20/20" -> listOf(
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "FIXED", title = "Kebutuhan Pokok (Fixed Cost)", targetPercent = 60.0, colorHex = "#6599B8"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "VARIABLE", title = "Kebutuhan Variabel & Jajan", targetPercent = 20.0, colorHex = "#F4A261"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "SAVINGS", title = "Tabungan & Investasi", targetPercent = 20.0, colorHex = "#74C69D")
+                )
+                "70/20/10" -> listOf(
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "FIXED", title = "Kebutuhan Pokok (Fixed Cost)", targetPercent = 70.0, colorHex = "#6599B8"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "VARIABLE", title = "Kebutuhan Variabel & Jajan", targetPercent = 20.0, colorHex = "#F4A261"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "SAVINGS", title = "Tabungan & Investasi", targetPercent = 10.0, colorHex = "#74C69D")
+                )
+                "40/30/30" -> listOf(
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "FIXED", title = "Kebutuhan Pokok (Fixed Cost)", targetPercent = 40.0, colorHex = "#6599B8"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "VARIABLE", title = "Kebutuhan Variabel & Jajan", targetPercent = 30.0, colorHex = "#F4A261"),
+                    BudgetPlanAllocation(monthId = mId, categoryKey = "SAVINGS", title = "Tabungan & Investasi (Agresif)", targetPercent = 30.0, colorHex = "#74C69D")
+                )
+                else -> listOf(
+                    // Default 50/30/20 with subscriptions
                     BudgetPlanAllocation(monthId = mId, categoryKey = "FIXED", title = "Kebutuhan Pokok (Fixed Cost)", targetPercent = 50.0, colorHex = "#6599B8"),
                     BudgetPlanAllocation(monthId = mId, categoryKey = "VARIABLE", title = "Kebutuhan Variabel & Jajan", targetPercent = 25.0, colorHex = "#F4A261"),
                     BudgetPlanAllocation(monthId = mId, categoryKey = "SAVINGS", title = "Tabungan & Investasi", targetPercent = 20.0, colorHex = "#74C69D"),
                     BudgetPlanAllocation(monthId = mId, categoryKey = "SUBSCRIPTION", title = "Langganan & Cicilan", targetPercent = 5.0, colorHex = "#A594F9")
                 )
-            )
+            }
+            repository.insertAllocations(allocationsList)
+            triggerCloudSync()
         }
     }
 

@@ -39,6 +39,7 @@ fun BudgetPlanningScreen(
     onAddCustomAllocation: (title: String, percent: Double, colorHex: String) -> Unit,
     onDeleteAllocation: (BudgetPlanAllocation) -> Unit,
     onResetDefaults: () -> Unit,
+    onApplyPreset: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val currencyFormatter = remember {
@@ -158,6 +159,35 @@ fun BudgetPlanningScreen(
                             color = TextSecondaryMuted,
                             lineHeight = 16.sp
                         )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Preset Rasio Populer (1-Tap):",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PastelSkyDark
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf("50/30/20", "60/20/20", "70/20/10", "40/30/30").forEach { preset ->
+                                OutlinedButton(
+                                    onClick = { onApplyPreset(preset) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = PastelSkySurface,
+                                        contentColor = PastelSkyDark
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, PastelSkyPrimary.copy(alpha = 0.4f)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.weight(1f).height(34.dp)
+                                ) {
+                                    Text(preset, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
                     }
                 }
             }

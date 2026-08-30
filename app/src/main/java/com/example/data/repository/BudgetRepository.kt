@@ -27,6 +27,7 @@ class BudgetRepository(private val dao: BudgetDao) {
     suspend fun updateWalletBalance(id: Long, newBalance: Double) = dao.updateWalletBalance(id, newBalance)
 
     fun getIncomesForMonth(monthId: String): Flow<List<IncomeItem>> = dao.getIncomesForMonth(monthId)
+    suspend fun getIncomesForMonthOnce(monthId: String): List<IncomeItem> = dao.getIncomesForMonthOnce(monthId)
     fun getSavingsForMonth(monthId: String): Flow<List<SavingItem>> = dao.getSavingsForMonth(monthId)
     fun getFixedExpensesForMonth(monthId: String): Flow<List<FixedExpenseItem>> = dao.getFixedExpensesForMonth(monthId)
     fun getVariableExpensesForMonth(monthId: String): Flow<List<VariableExpenseItem>> = dao.getVariableExpensesForMonth(monthId)
@@ -99,10 +100,10 @@ class BudgetRepository(private val dao: BudgetDao) {
         if (existingWallets.isEmpty()) {
             dao.insertWallets(
                 listOf(
+                    WalletItem(name = "Saldo Rekening", type = "BANK", balance = 3000000.0, colorHex = "#6599B8", iconName = "bank", isDefault = true),
+                    WalletItem(name = "Bisnis / Usaha", type = "BANK", balance = 1000000.0, colorHex = "#F4A261", iconName = "bank", isDefault = false),
                     WalletItem(name = "Uang Cash", type = "CASH", balance = 500000.0, colorHex = "#74C69D", iconName = "cash", isDefault = false),
-                    WalletItem(name = "Saldo DANA", type = "E_WALLET", balance = 350000.0, colorHex = "#118EEA", iconName = "dana", isDefault = false),
-                    WalletItem(name = "Saldo Rekening", type = "BANK", balance = 5000000.0, colorHex = "#6599B8", iconName = "bank", isDefault = true),
-                    WalletItem(name = "GoPay", type = "E_WALLET", balance = 150000.0, colorHex = "#00AED6", iconName = "wallet", isDefault = false)
+                    WalletItem(name = "Saldo DANA", type = "E_WALLET", balance = 350000.0, colorHex = "#118EEA", iconName = "dana", isDefault = false)
                 )
             )
         }
@@ -121,10 +122,10 @@ class BudgetRepository(private val dao: BudgetDao) {
             // Seed with sample data exactly matching the reference photos
             dao.insertIncomes(
                 listOf(
-                    IncomeItem(monthId = "2026-01", source = "Pekerjaan", type = "Utama", amount = 3000000.0, date = "01/01/2026"),
-                    IncomeItem(monthId = "2026-01", source = "Bisnis", type = "Sampingan", amount = 1000000.0, date = "05/01/2026"),
-                    IncomeItem(monthId = "2026-01", source = "Trading", type = "Sampingan", amount = 500000.0, date = "10/01/2026"),
-                    IncomeItem(monthId = "2026-01", source = "Freelance", type = "Sampingan", amount = 350000.0, date = "15/01/2026")
+                    IncomeItem(monthId = "2026-01", source = "Pekerjaan", type = "Utama", amount = 3000000.0, date = "01/01/2026", walletName = "Saldo Rekening"),
+                    IncomeItem(monthId = "2026-01", source = "Bisnis", type = "Sampingan", amount = 1000000.0, date = "05/01/2026", walletName = "Bisnis / Usaha"),
+                    IncomeItem(monthId = "2026-01", source = "Trading", type = "Sampingan", amount = 500000.0, date = "10/01/2026", walletName = "Uang Cash"),
+                    IncomeItem(monthId = "2026-01", source = "Freelance", type = "Sampingan", amount = 350000.0, date = "15/01/2026", walletName = "Saldo DANA")
                 )
             )
 

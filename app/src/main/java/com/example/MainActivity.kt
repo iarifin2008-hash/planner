@@ -462,7 +462,8 @@ fun MainAppScreen(viewModel: BudgetViewModel) {
                         onUpdatePercent = { id, p -> viewModel.updateAllocationPercent(id, p) },
                         onAddCustomAllocation = { title, p, color -> viewModel.addCustomAllocation(title, p, color) },
                         onDeleteAllocation = { item -> viewModel.deleteAllocation(item) },
-                        onResetDefaults = { viewModel.resetAllocationsToDefault() }
+                        onResetDefaults = { viewModel.resetAllocationsToDefault() },
+                        onApplyPreset = { preset -> viewModel.applyBudgetPreset(preset) }
                     )
                 }
                 2 -> {
