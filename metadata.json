@@ -1,0 +1,6 @@
+{
+  "name": "Money Planner",
+  "description": "Aplikasi Perhitungan Keuangan dan Budgeting Planner Bulanan dengan AI Asisten Suara Latar Belakang ('Hai Plenner'), Sinkronisasi Multi-Device 1 Akun, Sinkronisasi Jatah Persen, Tema Pastel, dan Manajemen Pos Anggaran.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
